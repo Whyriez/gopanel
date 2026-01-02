@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"gopanel/database"
 	"gopanel/services"
 	"os"
 	"path/filepath"
@@ -93,26 +94,30 @@ func ListWebsites(c *fiber.Ctx) error {
 
 // Handler: Hapus Website (Folder + Config Nginx)
 func DeleteWebsite(c *fiber.Ctx) error {
-	req := new(DeleteSiteRequest)
-	if err := c.BodyParser(req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Input invalid"})
+	// 1. Ambil ID dari parameter URL (misal: /api/website/5)
+	id := c.Params("id")
+
+	// 2. Cari dulu datanya di Database (Kita butuh Nama Domain-nya!)
+	var website database.Website
+	result := database.DB.First(&website, id)
+
+	if result.Error != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Website tidak ditemukan"})
 	}
 
-	if req.Domain == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "Domain diperlukan"})
+	// === [PANGGIL DI SINI] ===
+	// Hapus Config Nginx & Folder File Manager SEBELUM hapus data di DB
+	// Biar kalau error, datanya gak hilang duluan
+	err := services.RemoveNginxConfig(website.Domain)
+	if err != nil {
+		// Opsional: Tetap lanjut hapus DB walau Nginx error, atau return error.
+		// Saran saya: Return error biar ketahuan kalau gagal bersih-bersih server.
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus server config: " + err.Error()})
 	}
+	// =========================
 
-	cwd, _ := os.Getwd()
+	// 3. Kalau Nginx sudah bersih, baru hapus dari Database SQLite
+	database.DB.Delete(&website)
 
-	// 1. Hapus Folder Website
-	sitePath := filepath.Join(cwd, "sites", req.Domain)
-	if err := os.RemoveAll(sitePath); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus folder website"})
-	}
-
-	// 2. Hapus Config Nginx
-	configPath := filepath.Join(cwd, "generated_configs", req.Domain+".conf")
-	os.Remove(configPath) // Error diabaikan kalau file gak ada
-
-	return c.JSON(fiber.Map{"message": "Website " + req.Domain + " berhasil dihapus!"})
+	return c.JSON(fiber.Map{"message": "Website dan file server berhasil dihapus!"})
 }
