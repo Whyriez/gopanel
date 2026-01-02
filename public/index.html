@@ -112,6 +112,14 @@
                                        :class="form.type === 'proxy' ? 'bg-gray-800 text-white' : 'bg-gray-900 text-gray-500'"
                                        class="w-full border border-gray-600 rounded-lg px-4 py-2 transition-colors" placeholder="Ex: 3000">
                             </div>
+
+                            <div x-show="form.type === 'proxy'" class="mt-4">
+                                <label class="block text-sm text-gray-400 mb-1">Startup Command <span class="text-xs text-gray-500">(Default: node app.js)</span></label>
+                                <input type="text" x-model="form.start_cmd"
+                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white font-mono placeholder-gray-600"
+                                       placeholder="Ex: npm run start, node server.js, pm2 start ecosystem.config.js">
+                                <p class="text-xs text-gray-500 mt-1">Untuk Next.js gunakan: <code>npm run start</code></p>
+                            </div>
                         </div>
                         <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors">Create Website</button>
                     </form>
@@ -365,7 +373,7 @@
     // --- WEBSITE COMPONENT ---
     function websiteData() {
         return {
-            form: { domain: '', type: 'static', port: '' },
+            form: { domain: '', type: 'static', port: '', start_cmd: '' },
             sites: [], // Array untuk list website
             async loadSites() {
                 try {

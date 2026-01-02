@@ -9,9 +9,10 @@ import (
 )
 
 type CreateSiteRequest struct {
-	Domain string `json:"domain"`
-	Type   string `json:"type"` // static, php, proxy
-	Port   string `json:"port"` // opsional (untuk node/python)
+	Domain   string `json:"domain"`
+	Type     string `json:"type"` // static, php, proxy
+	Port     string `json:"port"` // opsional (untuk node/python)
+	StartCmd string `json:"start_cmd"`
 }
 type DeleteSiteRequest struct {
 	Domain string `json:"domain"`
@@ -36,6 +37,10 @@ func CreateWebsite(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Port wajib diisi untuk proxy"})
 	}
 
+	if req.Type == "proxy" && req.StartCmd == "" {
+		req.StartCmd = "node app.js"
+	}
+
 	// Cek apakah domain sudah ada (Global Check)
 	var count int64
 	database.DB.Model(&database.Website{}).Where("domain = ?", req.Domain).Count(&count)
@@ -44,17 +49,18 @@ func CreateWebsite(c *fiber.Ctx) error {
 	}
 
 	// Generate Config Nginx
-	path, err := services.GenerateNginxConfig(req.Domain, req.Type, req.Port)
+	path, err := services.GenerateNginxConfig(req.Domain, req.Type, req.Port, req.StartCmd)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Simpan ke DB dengan USER ID
+	// Simpan ke DB
 	newWeb := database.Website{
-		UserID: userID, // <--- INI KUNCINYA
-		Domain: req.Domain,
-		Type:   req.Type,
-		Port:   req.Port,
+		UserID:   userID,
+		Domain:   req.Domain,
+		Type:     req.Type,
+		Port:     req.Port,
+		StartCmd: req.StartCmd, // <--- Simpan
 	}
 
 	if err := database.DB.Create(&newWeb).Error; err != nil {
