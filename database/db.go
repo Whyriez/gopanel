@@ -40,7 +40,7 @@ func Connect() {
 		log.Fatal("Gagal konek ke database:", err)
 	}
 
-	DB.AutoMigrate(&User{}, &Database{})
+	DB.AutoMigrate(&User{}, &Database{}, &Website{})
 	fmt.Println("✅ Database terhubung!")
 
 	// Seed Admin
