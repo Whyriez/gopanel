@@ -3,6 +3,7 @@ package handlers
 import (
 	"gopanel/database"
 	"gopanel/services"
+	"os/exec"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -114,6 +115,12 @@ func DeleteWebsite(c *fiber.Ctx) error {
 	// Hapus Config Server
 	if err := services.RemoveNginxConfig(website.Domain); err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus server config: " + err.Error()})
+	}
+
+	if website.Type == "proxy" {
+		// Command: pm2 delete domain.com
+		exec.Command("pm2", "delete", website.Domain).Run()
+		exec.Command("pm2", "save").Run()
 	}
 
 	// Hapus Data DB
