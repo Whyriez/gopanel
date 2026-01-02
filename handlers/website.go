@@ -3,8 +3,6 @@ package handlers
 import (
 	"gopanel/database"
 	"gopanel/services"
-	"os"
-	"path/filepath"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -35,33 +33,31 @@ func CreateWebsite(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Port wajib diisi untuk website Node/Python"})
 	}
 
-	// === LOGIC BARU: BUAT FOLDER WEBSITE ===
-	// Ini akan membuat folder: ./sites/namadomain.com/
-	cwd, _ := os.Getwd()
-	sitePath := filepath.Join(cwd, "sites", req.Domain)
+	// === 1. SIMPAN KE DATABASE DULU ===
+	// (Opsional: Cek dulu apa domain sudah ada biar gak duplikat)
 
-	if err := os.MkdirAll(sitePath, 0755); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal membuat folder website"})
-	}
-
-	// Buat file index.html default jika tipe static agar folder tidak kosong
-	if req.Type == "static" || req.Type == "php" {
-		indexFile := filepath.Join(sitePath, "index.html")
-		defaultContent := "<h1>Welcome to " + req.Domain + "</h1><p>Created with GoPanel</p>"
-		os.WriteFile(indexFile, []byte(defaultContent), 0644)
-	}
-	// ========================================
-
-	// Lanjut generate Nginx Config (arahkan root nginx ke folder baru ini)
-	// Note: Anda mungkin perlu update logic services.GenerateNginxConfig
-	// agar root path di config nginx mengarah ke /path/to/gopanel/sites/domain
+	// === 2. GENERATE VIA SERVICE (SERVER LOGIC) ===
+	// Kita serahkan urusan bikin folder dan index.html ke Service Nginx saja.
+	// Jangan bikin manual di sini biar templatenya jalan!
 	path, err := services.GenerateNginxConfig(req.Domain, req.Type, req.Port)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// === 3. SIMPAN DATA KE DB ===
+	// (Sesuaikan user_id dengan user yang login jika ada, sementara kita hardcode/skip dulu)
+	newWeb := database.Website{
+		Domain: req.Domain,
+		Type:   req.Type,
+		Port:   req.Port,
+		// UserID: authUserId, // Nanti diisi dari token
+	}
+	if err := database.DB.Create(&newWeb).Error; err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan ke database"})
+	}
+
 	return c.JSON(fiber.Map{
-		"message":   "Website & Folder Berhasil Dibuat!",
+		"message":   "Website Berhasil Dibuat!",
 		"domain":    req.Domain,
 		"type":      req.Type,
 		"file_path": path,
@@ -69,55 +65,47 @@ func CreateWebsite(c *fiber.Ctx) error {
 }
 
 func ListWebsites(c *fiber.Ctx) error {
-	cwd, _ := os.Getwd()
-	sitesDir := filepath.Join(cwd, "sites")
+	// Ambil list dari Database, BUKAN dari folder scan
+	// Ini lebih akurat dan konsisten
+	var websites []database.Website
+	database.DB.Find(&websites)
 
-	entries, err := os.ReadDir(sitesDir)
-	if err != nil {
-		// Pastikan return array kosong explicit
-		return c.JSON([]string{})
+	// Kita cuma butuh list nama domainnya aja buat frontend saat ini
+	var domains []string
+	for _, w := range websites {
+		domains = append(domains, w.Domain)
 	}
 
-	// PERBAIKAN DISINI:
-	// Jangan 'var sites []string' (karena ini nil)
-	// Gunakan ini:
-	sites := []string{}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			sites = append(sites, entry.Name())
-		}
-	}
-
-	return c.JSON(sites)
+	return c.JSON(domains)
 }
 
-// Handler: Hapus Website (Folder + Config Nginx)
 func DeleteWebsite(c *fiber.Ctx) error {
-	// 1. Ambil ID dari parameter URL (misal: /api/website/5)
-	id := c.Params("id")
+	// [FIX] Baca Domain dari JSON Body (karena frontend kirim JSON)
+	req := new(DeleteSiteRequest)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Format data salah"})
+	}
 
-	// 2. Cari dulu datanya di Database (Kita butuh Nama Domain-nya!)
+	if req.Domain == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Domain wajib diisi"})
+	}
+
+	// 1. Cari website berdasarkan DOMAIN (Bukan ID)
 	var website database.Website
-	result := database.DB.First(&website, id)
+	result := database.DB.Where("domain = ?", req.Domain).First(&website)
 
 	if result.Error != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Website tidak ditemukan"})
+		return c.Status(404).JSON(fiber.Map{"error": "Website tidak ditemukan di database"})
 	}
 
-	// === [PANGGIL DI SINI] ===
-	// Hapus Config Nginx & Folder File Manager SEBELUM hapus data di DB
-	// Biar kalau error, datanya gak hilang duluan
+	// 2. Hapus Config Nginx & Folder
 	err := services.RemoveNginxConfig(website.Domain)
 	if err != nil {
-		// Opsional: Tetap lanjut hapus DB walau Nginx error, atau return error.
-		// Saran saya: Return error biar ketahuan kalau gagal bersih-bersih server.
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus server config: " + err.Error()})
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus config server: " + err.Error()})
 	}
-	// =========================
 
-	// 3. Kalau Nginx sudah bersih, baru hapus dari Database SQLite
+	// 3. Hapus dari Database
 	database.DB.Delete(&website)
 
-	return c.JSON(fiber.Map{"message": "Website dan file server berhasil dihapus!"})
+	return c.JSON(fiber.Map{"message": "Website " + req.Domain + " berhasil dihapus!"})
 }
