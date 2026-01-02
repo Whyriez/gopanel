@@ -25,6 +25,14 @@ type Database struct {
 	DBUser string
 }
 
+type Website struct {
+	ID     uint   `gorm:"primaryKey"`
+	UserID uint   // Milik siapa website ini?
+	Domain string `gorm:"unique"`
+	Type   string // static, php, proxy
+	Port   string // Cuma dipakai kalau proxy (misal 3000)
+}
+
 func Connect() {
 	var err error
 	DB, err = gorm.Open(sqlite.Open("gopanel.db"), &gorm.Config{})
