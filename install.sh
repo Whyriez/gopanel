@@ -86,6 +86,13 @@ if ! grep -q "sites-enabled" /etc/nginx/nginx.conf; then
     sed -i '/conf.d\/\*\.conf;/a \    include /etc/nginx/sites-enabled/*.conf;' /etc/nginx/nginx.conf
 fi
 
+# SETUP NODE.JS & PM2
+echo "📦 Menginstall Node.js & PM2..."
+curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+dnf install -y nodejs
+npm install -g pm2
+pm2 startup
+
 # 4. SETUP PHP-FPM
 # Ubah user PHP-FPM jadi nginx (defaultnya apache di RHEL)
 echo "🐘 Mengatur PHP-FPM..."

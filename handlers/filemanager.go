@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gopanel/database"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -177,8 +178,11 @@ func SaveFileContent(c *fiber.Ctx) error {
 		Content string `json:"content"`
 	}
 	req := new(SaveRequest)
-	c.BodyParser(req)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid JSON"})
+	}
 
+	// 1. Validasi Akses & Simpan File
 	fullPath, err := checkAccess(userID, role, req.Path)
 	if err != nil {
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
@@ -186,9 +190,37 @@ func SaveFileContent(c *fiber.Ctx) error {
 
 	err = os.WriteFile(fullPath, []byte(req.Content), 0644)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan"})
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan: " + err.Error()})
 	}
-	return c.JSON(fiber.Map{"message": "Saved"})
+
+	// === [FITUR BARU] AUTO RESTART PM2 ===
+	// Logic: Cek apakah file ini milik website tipe "proxy"? Kalau ya, restart PM2-nya.
+
+	// req.Path formatnya: "domain.com/app.js" atau "domain.com/public_html/style.css"
+	// Kita ambil segmen pertama yaitu nama domainnya.
+	parts := strings.Split(req.Path, "/")
+	if len(parts) > 0 {
+		domainName := parts[0]
+
+		// Cek tipe website di database
+		var website database.Website
+		// Kita cuma butuh kolom 'type' aja biar hemat
+		if err := database.DB.Select("type").Where("domain = ?", domainName).First(&website).Error; err == nil {
+
+			// Jika tipe websitenya adalah PROXY (Node.js/Python)
+			if website.Type == "proxy" {
+				// Jalankan restart di background (Goroutine) biar user gak nunggu loading lama
+				go func(d string) {
+					// Command: pm2 restart domain.com
+					fmt.Println("🔄 Auto-restarting PM2 for:", d)
+					exec.Command("pm2", "restart", d).Run()
+				}(domainName)
+			}
+		}
+	}
+	// ======================================
+
+	return c.JSON(fiber.Map{"message": "File berhasil disimpan & diterapkan!"})
 }
 
 // Helper untuk format ukuran file (Byte -> KB -> MB)
