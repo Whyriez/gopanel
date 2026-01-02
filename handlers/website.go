@@ -17,12 +17,14 @@ type DeleteSiteRequest struct {
 }
 
 func CreateWebsite(c *fiber.Ctx) error {
+	// Ambil ID user dari Token JWT (Middleware)
+	userID := uint(c.Locals("user_id").(float64))
+
 	req := new(CreateSiteRequest)
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Input invalid"})
 	}
 
-	// Validasi Dasar
 	if req.Domain == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Domain wajib diisi"})
 	}
@@ -30,47 +32,56 @@ func CreateWebsite(c *fiber.Ctx) error {
 		req.Type = "static"
 	}
 	if req.Type == "proxy" && req.Port == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "Port wajib diisi untuk website Node/Python"})
+		return c.Status(400).JSON(fiber.Map{"error": "Port wajib diisi untuk proxy"})
 	}
 
-	// === 1. SIMPAN KE DATABASE DULU ===
-	// (Opsional: Cek dulu apa domain sudah ada biar gak duplikat)
+	// Cek apakah domain sudah ada (Global Check)
+	var count int64
+	database.DB.Model(&database.Website{}).Where("domain = ?", req.Domain).Count(&count)
+	if count > 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "Domain sudah terdaftar oleh user lain"})
+	}
 
-	// === 2. GENERATE VIA SERVICE (SERVER LOGIC) ===
-	// Kita serahkan urusan bikin folder dan index.html ke Service Nginx saja.
-	// Jangan bikin manual di sini biar templatenya jalan!
+	// Generate Config Nginx
 	path, err := services.GenerateNginxConfig(req.Domain, req.Type, req.Port)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// === 3. SIMPAN DATA KE DB ===
-	// (Sesuaikan user_id dengan user yang login jika ada, sementara kita hardcode/skip dulu)
+	// Simpan ke DB dengan USER ID
 	newWeb := database.Website{
+		UserID: userID, // <--- INI KUNCINYA
 		Domain: req.Domain,
 		Type:   req.Type,
 		Port:   req.Port,
-		// UserID: authUserId, // Nanti diisi dari token
 	}
+
 	if err := database.DB.Create(&newWeb).Error; err != nil {
-		// Tampilkan pesan error asli dari database (misal: UNIQUE constraint failed)
 		return c.Status(500).JSON(fiber.Map{"error": "Database Error: " + err.Error()})
 	}
+
 	return c.JSON(fiber.Map{
 		"message":   "Website Berhasil Dibuat!",
 		"domain":    req.Domain,
-		"type":      req.Type,
 		"file_path": path,
 	})
 }
 
 func ListWebsites(c *fiber.Ctx) error {
-	// Ambil list dari Database, BUKAN dari folder scan
-	// Ini lebih akurat dan konsisten
-	var websites []database.Website
-	database.DB.Find(&websites)
+	userID := uint(c.Locals("user_id").(float64))
+	role := c.Locals("role").(string)
 
-	// Kita cuma butuh list nama domainnya aja buat frontend saat ini
+	var websites []database.Website
+
+	if role == "admin" {
+		// Admin bisa lihat SEMUA website
+		database.DB.Find(&websites)
+	} else {
+		// Customer cuma bisa lihat website MILIK SENDIRI
+		database.DB.Where("user_id = ?", userID).Find(&websites)
+	}
+
+	// Return array nama domain saja (sesuai kebutuhan frontend saat ini)
 	var domains []string
 	for _, w := range websites {
 		domains = append(domains, w.Domain)
@@ -80,32 +91,33 @@ func ListWebsites(c *fiber.Ctx) error {
 }
 
 func DeleteWebsite(c *fiber.Ctx) error {
-	// [FIX] Baca Domain dari JSON Body (karena frontend kirim JSON)
+	userID := uint(c.Locals("user_id").(float64))
+	role := c.Locals("role").(string)
+
 	req := new(DeleteSiteRequest)
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Format data salah"})
 	}
 
-	if req.Domain == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "Domain wajib diisi"})
-	}
-
-	// 1. Cari website berdasarkan DOMAIN (Bukan ID)
+	// Cari website di DB
 	var website database.Website
 	result := database.DB.Where("domain = ?", req.Domain).First(&website)
-
 	if result.Error != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Website tidak ditemukan di database"})
+		return c.Status(404).JSON(fiber.Map{"error": "Website tidak ditemukan"})
 	}
 
-	// 2. Hapus Config Nginx & Folder
-	err := services.RemoveNginxConfig(website.Domain)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus config server: " + err.Error()})
+	// KEAMANAN: Cek apakah yang menghapus adalah pemilik asli (atau admin)
+	if role != "admin" && website.UserID != userID {
+		return c.Status(403).JSON(fiber.Map{"error": "Anda tidak berhak menghapus website ini!"})
 	}
 
-	// 3. Hapus dari Database
+	// Hapus Config Server
+	if err := services.RemoveNginxConfig(website.Domain); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal hapus server config: " + err.Error()})
+	}
+
+	// Hapus Data DB
 	database.DB.Delete(&website)
 
-	return c.JSON(fiber.Map{"message": "Website " + req.Domain + " berhasil dihapus!"})
+	return c.JSON(fiber.Map{"message": "Website berhasil dihapus!"})
 }

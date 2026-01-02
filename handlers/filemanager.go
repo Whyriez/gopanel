@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"gopanel/database"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +12,52 @@ import (
 )
 
 const StorageRoot = "/var/www"
+
+func checkAccess(userID uint, role string, requestPath string) (string, error) {
+	// 1. Bersihkan path
+	cleanPath := filepath.Clean(filepath.Join(StorageRoot, requestPath))
+
+	// Pastikan tidak keluar dari Root
+	if !strings.HasPrefix(cleanPath, StorageRoot) {
+		return "", fmt.Errorf("akses ilegal")
+	}
+
+	// 2. Jika ADMIN, bebaskan akses
+	if role == "admin" {
+		return cleanPath, nil
+	}
+
+	// 3. Jika CUSTOMER (Ini Logic Isolasinya)
+	// Kita ambil daftar domain milik user dari DB
+	var userWebsites []database.Website
+	database.DB.Where("user_id = ?", userID).Find(&userWebsites)
+
+	// Buat map biar gampang ngecek
+	allowedDomains := make(map[string]bool)
+	for _, w := range userWebsites {
+		allowedDomains[w.Domain] = true
+	}
+
+	// Analisa Path yang diminta:
+	// Path relatif terhadap /var/www. Contoh: "domain.com/public_html"
+	// Kita ambil segmen pertama (nama domainnya)
+	relPath, _ := filepath.Rel(StorageRoot, cleanPath)
+
+	if relPath == "." {
+		// Kalau user minta root folder (/var/www), izinkan saja
+		// TAPI nanti di fungsi ListFiles kita filter tampilannya
+		return cleanPath, nil
+	}
+
+	firstSegment := strings.Split(relPath, "/")[0]
+
+	// Cek apakah segmen pertama itu adalah domain milik user?
+	if !allowedDomains[firstSegment] {
+		return "", fmt.Errorf("akses ditolak: folder ini bukan milik anda")
+	}
+
+	return cleanPath, nil
+}
 
 type FileItem struct {
 	Name  string `json:"name"`
@@ -39,32 +86,54 @@ func getSafePath(requestPath string) (string, error) {
 }
 
 func ListFiles(c *fiber.Ctx) error {
-	// Ambil parameter path dari URL (misal ?path=test.com/public_html)
+	userID := uint(c.Locals("user_id").(float64))
+	role := c.Locals("role").(string)
 	reqPath := c.Query("path")
 
-	// 1. Tentukan folder target
-	fullPath, err := getSafePath(reqPath)
+	// 1. Validasi Akses
+	fullPath, err := checkAccess(userID, role, reqPath)
 	if err != nil {
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// 2. Baca isi folder
+	// 2. Baca Folder
 	entries, err := os.ReadDir(fullPath)
 	if err != nil {
-		// Kalau folder gak ketemu, mungkin baru dibuat. Return kosong aja biar gak error merah.
 		return c.JSON([]interface{}{})
 	}
 
-	// 3. Format data untuk Frontend
-	var files []fiber.Map
+	// 3. Filter Tampilan (Khusus Root Customer)
+	// Kalau customer buka root, jangan tampilkan folder orang lain
+	var filteredEntries []os.DirEntry
 
-	for _, e := range entries {
+	if role != "admin" && (reqPath == "" || reqPath == "/") {
+		// Ambil list domain saya lagi
+		var userWebsites []database.Website
+		database.DB.Where("user_id = ?", userID).Find(&userWebsites)
+		myDomains := make(map[string]bool)
+		for _, w := range userWebsites {
+			myDomains[w.Domain] = true
+		}
+
+		for _, e := range entries {
+			// Hanya masukkan ke list jika nama foldernya ada di database saya
+			if myDomains[e.Name()] {
+				filteredEntries = append(filteredEntries, e)
+			}
+		}
+	} else {
+		// Kalau admin atau bukan di root, tampilkan semua isi folder itu
+		filteredEntries = entries
+	}
+
+	// 4. Format Output
+	var files []fiber.Map
+	for _, e := range filteredEntries {
 		info, _ := e.Info()
 		size := int64(0)
 		if !e.IsDir() {
 			size = info.Size()
 		}
-
 		files = append(files, fiber.Map{
 			"name":   e.Name(),
 			"is_dir": e.IsDir(),
@@ -72,13 +141,11 @@ func ListFiles(c *fiber.Ctx) error {
 		})
 	}
 
-	// 4. Sorting: Folder di atas, File di bawah
+	// Sorting
 	sort.Slice(files, func(i, j int) bool {
-		// Jika tipe beda (satu folder satu file), folder menang
 		if files[i]["is_dir"].(bool) != files[j]["is_dir"].(bool) {
 			return files[i]["is_dir"].(bool)
 		}
-		// Jika tipe sama, urutkan nama a-z
 		return files[i]["name"].(string) < files[j]["name"].(string)
 	})
 
@@ -86,8 +153,10 @@ func ListFiles(c *fiber.Ctx) error {
 }
 
 func GetFileContent(c *fiber.Ctx) error {
-	reqPath := c.Query("path")
-	fullPath, err := getSafePath(reqPath)
+	userID := uint(c.Locals("user_id").(float64))
+	role := c.Locals("role").(string)
+
+	fullPath, err := checkAccess(userID, role, c.Query("path"))
 	if err != nil {
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -96,32 +165,30 @@ func GetFileContent(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal baca file"})
 	}
-
 	return c.JSON(fiber.Map{"content": string(content)})
 }
 
 func SaveFileContent(c *fiber.Ctx) error {
+	userID := uint(c.Locals("user_id").(float64))
+	role := c.Locals("role").(string)
+
 	type SaveRequest struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
 	req := new(SaveRequest)
-	if err := c.BodyParser(req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid JSON"})
-	}
+	c.BodyParser(req)
 
-	fullPath, err := getSafePath(req.Path)
+	fullPath, err := checkAccess(userID, role, req.Path)
 	if err != nil {
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Tulis file (Permission 0644 standard web)
 	err = os.WriteFile(fullPath, []byte(req.Content), 0644)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan file: " + err.Error()})
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan"})
 	}
-
-	return c.JSON(fiber.Map{"message": "File berhasil disimpan!"})
+	return c.JSON(fiber.Map{"message": "Saved"})
 }
 
 // Helper untuk format ukuran file (Byte -> KB -> MB)
