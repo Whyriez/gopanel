@@ -54,6 +54,17 @@ func Login(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Login Berhasil!", "role": user.Role})
 }
 
+func GetMe(c *fiber.Ctx) error {
+	// Mengambil data dari middleware (token JWT)
+	role := c.Locals("role")
+	userId := c.Locals("user_id")
+
+	return c.JSON(fiber.Map{
+		"user_id": userId,
+		"role":    role,
+	})
+}
+
 func Logout(c *fiber.Ctx) error {
 	c.Cookie(&fiber.Cookie{
 		Name:    "jwt",

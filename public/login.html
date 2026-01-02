@@ -2,41 +2,75 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - GoPanel</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-dark d-flex align-items-center justify-content-center" style="height: 100vh;">
-    <div class="card p-4 shadow-lg" style="width: 350px;">
-        <h3 class="text-center mb-4">🔐 GoPanel</h3>
-        <form id="loginForm">
-            <div class="mb-3">
-                <label>Username</label>
-                <input type="text" class="form-control" id="username" required>
-            </div>
-            <div class="mb-3">
-                <label>Password</label>
-                <input type="password" class="form-control" id="password" required>
-            </div>
-            <button type="submit" class="btn btn-primary w-100">Masuk</button>
-            <div id="errorMsg" class="text-danger mt-3 text-center small"></div>
-        </form>
+<body class="bg-gray-900 flex items-center justify-center h-screen font-sans antialiased text-gray-100">
+
+<div x-data="loginHandler()" class="w-full max-w-sm p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-blue-500 mb-2"><i class="fas fa-rocket mr-2"></i>GoPanel</h1>
+        <p class="text-gray-400 text-sm">Masuk untuk mengelola server</p>
     </div>
-    <script>
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username: user, password: pass})
-                });
-                const data = await res.json();
-                if (res.ok) window.location.href = '/';
-                else document.getElementById('errorMsg').innerText = data.error;
-            } catch (err) { alert("Error Koneksi"); }
-        });
-    </script>
+
+    <form @submit.prevent="submitLogin" class="space-y-6">
+        <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">Username</label>
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500"><i class="fas fa-user"></i></span>
+                <input type="text" x-model="form.username" required
+                       class="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none text-white transition-colors">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">Password</label>
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500"><i class="fas fa-lock"></i></span>
+                <input type="password" x-model="form.password" required
+                       class="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none text-white transition-colors">
+            </div>
+        </div>
+
+        <button type="submit" :disabled="isLoading"
+                class="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center">
+            <span x-show="!isLoading">Masuk Dashboard</span>
+            <span x-show="isLoading"><i class="fas fa-spinner fa-spin mr-2"></i> Loading...</span>
+        </button>
+
+        <div x-show="errorMessage" x-text="errorMessage" class="text-red-400 text-center text-sm font-medium animate-pulse"></div>
+    </form>
+</div>
+
+<script>
+    function loginHandler() {
+        return {
+            form: { username: '', password: '' },
+            isLoading: false,
+            errorMessage: '',
+            async submitLogin() {
+                this.isLoading = true;
+                this.errorMessage = '';
+                try {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.form)
+                    });
+                    const data = await res.json();
+                    if (res.ok) window.location.href = '/';
+                    else this.errorMessage = data.error || 'Login gagal';
+                } catch (e) {
+                    this.errorMessage = 'Gagal terhubung ke server';
+                } finally {
+                    this.isLoading = false;
+                }
+            }
+        }
+    }
+</script>
 </body>
 </html>

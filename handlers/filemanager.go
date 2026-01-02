@@ -9,6 +9,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+const StorageDir = "./sites"
+
 type FileItem struct {
 	Name  string `json:"name"`
 	Size  string `json:"size"`
@@ -20,19 +22,40 @@ type SaveFileRequest struct {
 	Content string `json:"content"`
 }
 
-func ListFiles(c *fiber.Ctx) error {
-	baseDir, _ := os.Getwd()
-	relativePath := c.Query("path", "")
-	fullPath := filepath.Join(baseDir, relativePath)
+func getSafePath(relativePath string) (string, error) {
+	// Ambil absolute path dari folder project
+	cwd, _ := os.Getwd()
+	baseDir := filepath.Join(cwd, StorageDir)
 
+	// Pastikan folder base ada dulu
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		os.MkdirAll(baseDir, 0755)
+	}
+
+	// Gabungkan base dengan input user
+	fullPath := filepath.Join(baseDir, relativePath)
 	cleanPath := filepath.Clean(fullPath)
+
+	// Security Check: Pastikan user tidak naik ke atas (../..) keluar dari folder sites
 	if !strings.HasPrefix(cleanPath, baseDir) {
-		return c.Status(403).JSON(fiber.Map{"error": "Akses Ditolak!"})
+		return "", fmt.Errorf("Akses Ditolak")
+	}
+
+	return cleanPath, nil
+}
+
+func ListFiles(c *fiber.Ctx) error {
+	relativePath := c.Query("path", "")
+
+	cleanPath, err := getSafePath(relativePath)
+	if err != nil {
+		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	entries, err := os.ReadDir(cleanPath)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal buka folder"})
+		// Jika folder kosong/baru dan belum ada isinya, return kosong aja jangan error 500
+		return c.JSON([]FileItem{})
 	}
 
 	var files []FileItem
@@ -52,13 +75,11 @@ func ListFiles(c *fiber.Ctx) error {
 }
 
 func GetFileContent(c *fiber.Ctx) error {
-	baseDir, _ := os.Getwd()
 	relativePath := c.Query("path", "")
-	fullPath := filepath.Join(baseDir, relativePath)
 
-	cleanPath := filepath.Clean(fullPath)
-	if !strings.HasPrefix(cleanPath, baseDir) {
-		return c.Status(403).JSON(fiber.Map{"error": "Akses Ditolak!"})
+	cleanPath, err := getSafePath(relativePath)
+	if err != nil {
+		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	content, err := os.ReadFile(cleanPath)
@@ -70,19 +91,17 @@ func GetFileContent(c *fiber.Ctx) error {
 }
 
 func SaveFileContent(c *fiber.Ctx) error {
-	baseDir, _ := os.Getwd()
 	req := new(SaveFileRequest)
 	if err := c.BodyParser(req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Input invalid"})
 	}
 
-	fullPath := filepath.Join(baseDir, req.Path)
-	cleanPath := filepath.Clean(fullPath)
-	if !strings.HasPrefix(cleanPath, baseDir) {
-		return c.Status(403).JSON(fiber.Map{"error": "Akses Ditolak!"})
+	cleanPath, err := getSafePath(req.Path)
+	if err != nil {
+		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	err := os.WriteFile(cleanPath, []byte(req.Content), 0644)
+	err = os.WriteFile(cleanPath, []byte(req.Content), 0644)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan file"})
 	}

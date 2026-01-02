@@ -25,11 +25,15 @@ func main() {
 	// === ROUTE PROTECTED (Harus Login) ===
 	api := app.Group("/api", middleware.IsAuthenticated)
 
+	api.Get("/me", handlers.GetMe)
+
 	// System Info
 	api.Get("/system-info", handlers.GetSystemInfo)
 
 	// Website
 	api.Post("/create-website", handlers.CreateWebsite)
+	api.Get("/websites", handlers.ListWebsites) // <--- BARU: List
+	api.Post("/delete-website", handlers.DeleteWebsite)
 
 	// File Manager
 	api.Get("/files", handlers.ListFiles)
@@ -38,8 +42,9 @@ func main() {
 
 	// === ROUTE DATABASE MANAGER ===
 	api.Post("/create-database", handlers.CreateDatabase)
+	api.Post("/delete-database", handlers.DeleteDatabase) // <--- BARU: Delete
 	api.Get("/databases", handlers.ListDatabases)
-	
+
 	// === ROUTE ADMIN ONLY ===
 	adminAPI := api.Group("/admin", middleware.RequireAdmin)
 	adminAPI.Post("/create-user", handlers.CreateUser)

@@ -21,6 +21,21 @@ func isValidName(name string) bool {
 	return match
 }
 
+func GetDBConnection() (*sql.DB, error) {
+	dsn := fmt.Sprintf("%s:%s@%s/", dbUser, dbPass, dbHost)
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cek apakah koneksi benar-benar hidup
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
 func CreateMySQLDatabase(dbName, dbUserNew, dbPassNew string) error {
 	// 1. Security Check (Wajib!)
 	if !isValidName(dbName) || !isValidName(dbUserNew) {
