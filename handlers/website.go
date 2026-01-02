@@ -53,9 +53,9 @@ func CreateWebsite(c *fiber.Ctx) error {
 		// UserID: authUserId, // Nanti diisi dari token
 	}
 	if err := database.DB.Create(&newWeb).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan ke database"})
+		// Tampilkan pesan error asli dari database (misal: UNIQUE constraint failed)
+		return c.Status(500).JSON(fiber.Map{"error": "Database Error: " + err.Error()})
 	}
-
 	return c.JSON(fiber.Map{
 		"message":   "Website Berhasil Dibuat!",
 		"domain":    req.Domain,
