@@ -119,11 +119,27 @@ firewall-cmd --permanent --add-port=3000/tcp # Port Panel
 firewall-cmd --reload
 
 # 7. BUILD GOPANEL
-echo "🔨 Compiling GoPanel..."
+echo "🔍 Mendeteksi versi Go di sistem..."
+# 1. Ambil versi Go terinstall (Output: go1.25.3 -> 1.25.3)
+INSTALLED_VER=$(go version | awk '{print $3}' | sed 's/go//')
+
+# 2. Ambil cuma angka Major.Minor (1.25.3 -> 1.25)
+# Karena go.mod butuhnya format 1.xx
+SAFE_VER=$(echo $INSTALLED_VER | cut -d. -f1,2)
+
+echo "✨ Versi terdeteksi: $INSTALLED_VER. Menyesuaikan go.mod ke versi $SAFE_VER..."
 # Hapus go.mod lama biar fresh (opsional, jaga2 conflict versi Go)
 rm -f go.sum
+# Perintah sakti untuk ubah versi di go.mod
+go mod edit -go=$SAFE_VER
 go mod tidy
 go build -o gopanel-server main.go
+
+# Cek apakah file berhasil dibuat
+if [ ! -f "gopanel-server" ]; then
+    echo "❌ Gagal Compile! Cek error di atas."
+    exit 1
+fi
 
 # 8. BUAT SYSTEMD SERVICE (Biar auto-start pas restart VPS)
 echo "⚙️ Membuat Service Systemd..."
