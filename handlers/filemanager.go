@@ -58,7 +58,7 @@ func ListFiles(c *fiber.Ctx) error {
 		return c.JSON([]FileItem{})
 	}
 
-	var files []FileItem
+	files := []FileItem{}
 	for _, entry := range entries {
 		info, _ := entry.Info()
 		sizeStr := "-"

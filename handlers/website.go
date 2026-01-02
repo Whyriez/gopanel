@@ -73,16 +73,21 @@ func ListWebsites(c *fiber.Ctx) error {
 
 	entries, err := os.ReadDir(sitesDir)
 	if err != nil {
-		// Kalau folder belum ada, return array kosong
+		// Pastikan return array kosong explicit
 		return c.JSON([]string{})
 	}
 
-	var sites []string
+	// PERBAIKAN DISINI:
+	// Jangan 'var sites []string' (karena ini nil)
+	// Gunakan ini:
+	sites := []string{}
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			sites = append(sites, entry.Name())
 		}
 	}
+
 	return c.JSON(sites)
 }
 

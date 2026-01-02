@@ -370,8 +370,12 @@
             async loadSites() {
                 try {
                     const res = await fetch('/api/websites');
-                    this.sites = await res.json();
-                } catch(e) { this.sites = []; }
+                    // PERBAIKAN: Tambahkan "|| []" agar kalau null tetap jadi array
+                    const data = await res.json();
+                    this.sites = data || [];
+                } catch(e) {
+                    this.sites = [];
+                }
             },
             async createWebsite() {
                 const res = await fetch('/api/create-website', {
