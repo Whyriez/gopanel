@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>GoPanel Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>.card-stat { transition: all 0.3s; } .card-stat:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }</style>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-primary mb-4">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1">🚀 GoPanel</span>
+        <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container pb-5">
+
+    <div class="row mb-5">
+        <div class="col-md-4"><div class="card card-stat border-0 shadow-sm"><div class="card-body"><h5 class="text-muted">CPU</h5><h2 class="fw-bold" id="cpu-val">0%</h2><div class="progress mt-2" style="height: 5px"><div class="progress-bar bg-danger" id="cpu-bar" style="width: 0%"></div></div></div></div></div>
+        <div class="col-md-4"><div class="card card-stat border-0 shadow-sm"><div class="card-body"><h5 class="text-muted">RAM</h5><h2 class="fw-bold" id="ram-val">0 / 0</h2><div class="progress mt-2" style="height: 5px"><div class="progress-bar bg-info" id="ram-bar" style="width: 0%"></div></div></div></div></div>
+        <div class="col-md-4"><div class="card card-stat border-0 shadow-sm"><div class="card-body"><h5 class="text-muted">Disk</h5><h2 class="fw-bold" id="disk-val">0 / 0</h2><div class="progress mt-2" style="height: 5px"><div class="progress-bar bg-warning" id="disk-bar" style="width: 0%"></div></div></div></div></div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3"><h5 class="mb-0">🌐 Buat Website</h5></div>
+        <div class="card-body">
+            <form id="createSiteForm">
+                <div class="row g-2">
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" id="domainInput" placeholder="Domain (ex: webku.com)" required>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="typeInput" onchange="checkType()">
+                            <option value="static">HTML Static</option>
+                            <option value="php">PHP (WordPress)</option>
+                            <option value="proxy">NodeJS / Python</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="number" class="form-control" id="portInput" placeholder="Port" disabled>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Buat</button>
+                    </div>
+                </div>
+                <small class="text-muted">*Port hanya diisi jika memilih NodeJS/Python</small>
+            </form>
+
+            <script>
+                // Logic kecil: Aktifkan kolom Port HANYA jika pilih Node/Python
+                function checkType() {
+                    const type = document.getElementById('typeInput').value;
+                    const portInput = document.getElementById('portInput');
+                    if (type === 'proxy') {
+                        portInput.disabled = false;
+                        portInput.placeholder = "Ex: 3000";
+                    } else {
+                        portInput.disabled = true;
+                        portInput.value = "";
+                        portInput.placeholder = "Port";
+                    }
+                }
+            </script>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <div><h5 class="mb-0">📂 Files</h5><small id="path-label">/ (Root)</small></div>
+            <div>
+                <button class="btn btn-sm btn-outline-primary" onclick="goUp()" id="btn-up" disabled>⬆ Up</button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="loadFiles()">Refresh</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0"><tbody id="file-list"></tbody></table>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0">🛢 MySQL Database Manager</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 border-end">
+                    <h6 class="text-muted mb-3">Buat Database Baru</h6>
+                    <form id="createDBForm">
+                        <div class="mb-2">
+                            <input type="text" id="dbName" class="form-control" placeholder="Nama Database (contoh: toko_db)" required pattern="[a-zA-Z0-9_]+">
+                            <small class="text-muted" style="font-size: 10px;">Hanya huruf, angka, _</small>
+                        </div>
+                        <div class="mb-2">
+                            <input type="text" id="dbUser" class="form-control" placeholder="Username DB" required pattern="[a-zA-Z0-9_]+">
+                        </div>
+                        <div class="mb-3">
+                            <input type="text" id="dbPass" class="form-control" placeholder="Password DB" required>
+                        </div>
+                        <button type="submit" class="btn btn-warning w-100 text-dark fw-bold">Buat Database</button>
+                    </form>
+                </div>
+
+                <div class="col-md-8">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">List Database Saya</h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadDatabases()">Refresh</button>
+                    </div>
+                    <table class="table table-sm table-striped">
+                        <thead>
+                        <tr>
+                            <th>Nama DB</th>
+                            <th>User DB</th>
+                            <th>Status</th>
+                        </tr>
+                        </thead>
+                        <tbody id="db-list">
+                        <tr><td colspan="3">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-dark text-white"><h5 class="mb-0">👥 Users (Admin Only)</h5></div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 border-end">
+                    <form id="createUserForm">
+                        <input type="text" id="newUsername" class="form-control mb-2" placeholder="User" required>
+                        <input type="password" id="newPassword" class="form-control mb-2" placeholder="Pass" required>
+                        <select id="newRole" class="form-select mb-2"><option value="customer">Customer</option><option value="admin">Admin</option></select>
+                        <button type="submit" class="btn btn-primary w-100">Add User</button>
+                    </form>
+                </div>
+                <div class="col-md-8">
+                    <table class="table table-sm"><tbody id="user-list"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editorModal"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Edit: <span id="editor-filename"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-0"><textarea id="file-content" class="form-control border-0 bg-dark text-light" style="height: 500px; font-family: monospace;"></textarea></div><div class="modal-footer"><button onclick="saveFile()" class="btn btn-success">Save</button></div></div></div></div>
+
+<script>
+    // === AUTH ===
+    async function logout() { await fetch('/api/logout', {method:'POST'}); window.location.href='/login'; }
+
+    // === SYSTEM INFO ===
+    setInterval(async () => {
+        const res = await fetch('/api/system-info');
+        const d = await res.json();
+        document.getElementById('cpu-val').innerText = d.cpu.usage_percent+'%';
+        document.getElementById('cpu-bar').style.width = d.cpu.usage_percent+'%';
+        document.getElementById('ram-val').innerText = d.ram.used;
+        document.getElementById('ram-bar').style.width = d.ram.used_percent+'%';
+        document.getElementById('disk-val').innerText = d.disk.used;
+        document.getElementById('disk-bar').style.width = d.disk.used_percent+'%';
+    }, 2000);
+
+    // === CREATE WEBSITE ===
+    // === CREATE WEBSITE (UPDATED) ===
+    document.getElementById('createSiteForm').addEventListener('submit', async(e)=>{
+        e.preventDefault();
+
+        const payload = {
+            domain: document.getElementById('domainInput').value,
+            type: document.getElementById('typeInput').value,
+            port: document.getElementById('portInput').value
+        };
+
+        const res = await fetch('/api/create-website', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+        if(res.ok) alert("✅ " + result.message);
+        else alert("❌ " + result.error);
+    });
+
+    // === FILE MANAGER ===
+    let curPath = "", editFile = "";
+    async function loadFiles(path = null) {
+        if(path!==null) curPath=path;
+        document.getElementById('path-label').innerText = curPath || "/";
+        document.getElementById('btn-up').disabled = !curPath;
+        
+        try {
+            const res = await fetch(`/api/files?path=${encodeURIComponent(curPath)}`);
+            if(!res.ok) throw new Error();
+            const files = await res.json();
+            const tbody = document.getElementById('file-list'); tbody.innerHTML='';
+            files.forEach(f => {
+                let action = f.is_dir 
+                    ? `loadFiles('${curPath ? curPath+'/'+f.name : f.name}')` 
+                    : `openFile('${f.name}')`;
+                tbody.innerHTML += `<tr><td class="ps-3"><a href="#" onclick="${action};return false;" class="text-decoration-none ${f.is_dir?'fw-bold':''}">${f.is_dir?'📁':'📄'} ${f.name}</a></td><td>${f.size}</td></tr>`;
+            });
+        } catch(e) { document.getElementById('file-list').innerHTML='<tr><td>Akses Ditolak</td></tr>'; }
+    }
+    function goUp() { let p=curPath.split('/'); p.pop(); loadFiles(p.join('/')); }
+    
+    async function openFile(name) {
+        editFile = curPath ? curPath+'/'+name : name;
+        const res = await fetch(`/api/file-content?path=${encodeURIComponent(editFile)}`);
+        const d = await res.json();
+        document.getElementById('editor-filename').innerText = editFile;
+        document.getElementById('file-content').value = d.content;
+        new bootstrap.Modal(document.getElementById('editorModal')).show();
+    }
+
+    async function saveFile() {
+        await fetch('/api/save-file', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({path:editFile, content:document.getElementById('file-content').value})
+        });
+        alert("Saved!");
+    }
+    loadFiles("");
+
+    // === USER MANAGER ===
+    async function loadUsers() {
+        const res = await fetch('/api/admin/users');
+        if(res.status===403) { document.getElementById('user-list').innerHTML='<tr><td class="text-danger">Bukan Admin</td></tr>'; return; }
+        const users = await res.json();
+        document.getElementById('user-list').innerHTML = users.map(u=>`<tr><td>${u.Username}</td><td><span class="badge ${u.Role==='admin'?'bg-danger':'bg-success'}">${u.Role}</span></td></tr>`).join('');
+    }
+    document.getElementById('createUserForm').addEventListener('submit', async(e)=>{
+        e.preventDefault();
+        const res = await fetch('/api/admin/create-user', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+                username: document.getElementById('newUsername').value,
+                password: document.getElementById('newPassword').value,
+                role: document.getElementById('newRole').value
+            })
+        });
+        if(res.ok) { alert("User Created"); loadUsers(); } else alert("Error");
+    });
+
+    // 5. FUNGSI DATABASE MANAGER
+    async function loadDatabases() {
+        try {
+            const res = await fetch('/api/databases');
+            const dbs = await res.json();
+            const tbody = document.getElementById('db-list');
+            tbody.innerHTML = '';
+
+            if (dbs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Belum ada database</td></tr>';
+                return;
+            }
+
+            dbs.forEach(d => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="fw-bold text-primary">🛢 ${d.DBName}</td>
+                        <td>${d.DBUser}</td>
+                        <td><span class="badge bg-success">Active</span></td>
+                    </tr>
+                `;
+            });
+        } catch (err) {
+            console.error("Gagal load DB");
+        }
+    }
+
+    document.getElementById('createDBForm').addEventListener('submit', async(e) => {
+        e.preventDefault();
+
+        const payload = {
+            db_name: document.getElementById('dbName').value,
+            db_user: document.getElementById('dbUser').value,
+            db_pass: document.getElementById('dbPass').value
+        };
+
+        const res = await fetch('/api/create-database', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+            alert("✅ " + result.message);
+            document.getElementById('createDBForm').reset();
+            loadDatabases();
+        } else {
+            alert("❌ Gagal: " + result.error);
+        }
+    });
+
+    // Panggil saat load
+    loadDatabases();
+
+    loadUsers();
+</script>
+</body>
+</html>

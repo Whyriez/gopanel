@@ -1,0 +1,35 @@
+# --- Specific Request ---
+
+# Database SQLite
+gopanel.db
+*.db
+*.sqlite
+
+# Temporary Build Files & Logs
+# Mengabaikan seluruh folder tmp (termasuk main.exe dan build-errors.log)
+tmp/
+
+# Generated Nginx Configs
+generated_configs/
+
+# --- Standard Go & System Ignores (Recommended) ---
+
+# Binaries (jika di-build di root)
+main
+main.exe
+gopanel
+gopanel.exe
+
+# Log files general
+*.log
+
+# Environment Variables (PENTING: Jangan pernah push .env)
+.env
+
+# IDE / Editor folders
+.idea/
+.vscode/
+
+# OS Specific files
+.DS_Store
+Thumbs.db
