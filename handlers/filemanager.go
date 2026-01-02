@@ -12,8 +12,6 @@ import (
 
 const StorageRoot = "/var/www"
 
-const StorageDir = "./sites"
-
 type FileItem struct {
 	Name  string `json:"name"`
 	Size  string `json:"size"`
